@@ -19,3 +19,7 @@
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>
+
+# Reason For Fork
+
+Repository has been forked in order to be able to make updating easier for the config files as well as some custom logger functions which are used on the snow8 rp server.
