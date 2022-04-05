@@ -2,11 +2,11 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local frozen = false
 local permissions = {
-    ['kill'] = 'god',
+    ['kill'] = 'admin',
     ['ban'] = 'admin',
-    ['noclip'] = 'admin',
-    ['kickall'] = 'admin',
-    ['kick'] = 'admin'
+    ['noclip'] = 'mod',
+    ['kickall'] = 'sadmin',
+    ['kick'] = 'director'
 }
 
 -- Get Dealers
@@ -41,7 +41,7 @@ end)
 
 QBCore.Functions.CreateCallback('qb-admin:server:getrank', function(source, cb)
     local src = source
-    if QBCore.Functions.HasPermission(src, 'god') or IsPlayerAceAllowed(src, 'command') then
+    if QBCore.Functions.HasPermission(src, 'director') or IsPlayerAceAllowed(src, 'command') then
         cb(true)
     else
         cb(false)
@@ -81,6 +81,8 @@ end)
 
 RegisterNetEvent('qb-admin:server:kill', function(player)
     TriggerClientEvent('hospital:client:KillPlayer', player.id)
+    TriggerEvent('logs:adminkill', source, player.id)
+
 end)
 
 RegisterNetEvent('qb-admin:server:revive', function(player)
@@ -90,6 +92,7 @@ end)
 RegisterNetEvent('qb-admin:server:kick', function(player, reason)
     local src = source
     if QBCore.Functions.HasPermission(src, permissions['kick']) or IsPlayerAceAllowed(src, 'command')  then
+        TriggerEvent("logs:kick", (GetPlayerName(src) .. " has kicked " .. GetPlayerName(player.id) .. " for: " .. reason))
         TriggerEvent('qb-log:server:CreateLog', 'bans', 'Player Kicked', 'red', string.format('%s was kicked by %s for %s', GetPlayerName(player.id), GetPlayerName(src), reason), true)
         DropPlayer(player.id, Lang:t("info.kicked_server") .. ':\n' .. reason .. '\n\n' .. Lang:t("info.check_discord") .. QBCore.Config.Server.discord)
     end
@@ -119,8 +122,11 @@ RegisterNetEvent('qb-admin:server:ban', function(player, time, reason)
         })
         TriggerEvent('qb-log:server:CreateLog', 'bans', 'Player Banned', 'red', string.format('%s was banned by %s for %s', GetPlayerName(player.id), GetPlayerName(src), reason), true)
         if banTime >= 2147483647 then
+            TriggerEvent("logs:ban", (GetPlayerName(src) .. " has banned " .. GetPlayerName(player.id) .. " permantely for: " .. reason))
+
             DropPlayer(player.id, Lang:t("info.banned") .. '\n' .. reason .. Lang:t("info.ban_perm") .. QBCore.Config.Server.discord)
         else
+            TriggerEvent("logs:ban", (GetPlayerName(src) .. " has banned " .. GetPlayerName(player.id) .. " permantely for: " .. reason))
             DropPlayer(player.id, Lang:t("info.banned") .. '\n' .. reason .. Lang:t("info.ban_expires") .. timeTable['day'] .. '/' .. timeTable['month'] .. '/' .. timeTable['year'] .. ' ' .. timeTable['hour'] .. ':' .. timeTable['min'] .. '\n🔸 Check our Discord for more information: ' .. QBCore.Config.Server.discord)
         end
     end
@@ -131,6 +137,7 @@ AddEventHandler('qb-admin:server:spectate', function(player)
     local src = source
     local targetped = GetPlayerPed(player.id)
     local coords = GetEntityCoords(targetped)
+    TriggerEvent('logs:spectate', src, player.id)
     TriggerClientEvent('qb-admin:client:spectate', src, player.id, coords)
 end)
 
@@ -140,9 +147,11 @@ AddEventHandler('qb-admin:server:freeze', function(player)
     if not frozen then
         frozen = true
         FreezeEntityPosition(target, true)
+        TriggerEvent('logs:freeze', src, player.id, frozen)
     else
         frozen = false
         FreezeEntityPosition(target, false)
+        TriggerEvent('logs:freeze', src, player.id, frozen)
     end
 end)
 
@@ -188,6 +197,7 @@ end)
 RegisterNetEvent('qb-admin:server:inventory', function(player)
     local src = source
     TriggerClientEvent('qb-admin:client:inventory', src, player.id)
+    TriggerEvent('logs:admininvent', src, player.id)
 end)
 
 RegisterNetEvent('qb-admin:server:cloth', function(player)
@@ -196,7 +206,7 @@ end)
 
 RegisterNetEvent('qb-admin:server:setPermissions', function(targetId, group)
     local src = source
-    if QBCore.Functions.HasPermission(src, 'god') or IsPlayerAceAllowed(src, 'command') then
+    if QBCore.Functions.HasPermission(src, 'director') or IsPlayerAceAllowed(src, 'command') then
         QBCore.Functions.AddPermission(targetId, group[1].rank)
         TriggerClientEvent('QBCore:Notify', targetId, Lang:t("info.rank_level")..group[1].label)
     end
@@ -217,9 +227,9 @@ end)
 
 RegisterNetEvent('qb-admin:server:Staffchat:addMessage', function(name, msg)
     local src = source
-    if QBCore.Functions.HasPermission(src, 'admin') or IsPlayerAceAllowed(src, 'command') then
+    if QBCore.Functions.HasPermission(src, 'helper') or IsPlayerAceAllowed(src, 'command') then
         if QBCore.Functions.IsOptin(src) then
-            TriggerClientEvent('chat:addMessage', src, Lang:t("info.staffchat")..name, 'error', msg)
+            TriggerClientEvent('chat:addMessage', src, { args = { "Staffchat: ^3".. name .. "^0", msg }, color = {245, 66, 66 }})
         end
     end
 end)
@@ -246,6 +256,14 @@ end)
 
 -- Commands
 
+QBCore.Commands.Add('clear', 'Clear Chat', {}, false, function(source, args)
+    TriggerClientEvent('chat:clear', source)
+end, 'user')
+
+QBCore.Commands.Add('clearall', 'Clear All Chat', {}, false, function(source, args)
+    TriggerClientEvent('chat:clear', -1)
+end, 'mod')
+
 QBCore.Commands.Add('blips', Lang:t("commands.blips_for_player"), {}, false, function(source)
     local src = source
     TriggerClientEvent('qb-admin:client:toggleBlips', src)
@@ -259,17 +277,17 @@ end, 'admin')
 QBCore.Commands.Add('coords', Lang:t("commands.coords_dev_command"), {}, false, function(source)
     local src = source
     TriggerClientEvent('qb-admin:client:ToggleCoords', src)
-end, 'admin')
+end, 'mod')
 
 QBCore.Commands.Add('noclip', Lang:t("commands.toogle_noclip"), {}, false, function(source)
     local src = source
     TriggerClientEvent('qb-admin:client:ToggleNoClip', src)
-end, 'admin')
+end, 'mod')
 
 QBCore.Commands.Add('admincar', Lang:t("commands.save_vehicle_garage"), {}, false, function(source, args)
     local ply = QBCore.Functions.GetPlayer(source)
     TriggerClientEvent('qb-admin:client:SaveCar', source)
-end, 'admin')
+end, 'sadmin')
 
 QBCore.Commands.Add('announce', Lang:t("commands.make_announcement"), {}, false, function(source, args)
     local msg = table.concat(args, ' ')
@@ -279,24 +297,36 @@ QBCore.Commands.Add('announce', Lang:t("commands.make_announcement"), {}, false,
         multiline = true,
         args = {"Announcement", msg}
     })
-end, 'admin')
+end, 'mod')
+
+RegisterCommand("consoleannounce", function(source, args, rawCommand)
+    if source > 0 then
+    else
+        local msg = table.concat(args, ' ')
+        --TriggerEvent("logs:announce", source, msg)
+        TriggerClientEvent('chat:addMessage', -1, { args = { "ANNOUNCEMENT", msg }, color = {245, 66, 66 }})
+    end
+end, true)
 
 QBCore.Commands.Add('admin', Lang:t("commands.open_admin"), {}, false, function(source, args)
     TriggerClientEvent('qb-admin:client:openMenu', source)
-end, 'admin')
+end, 'mod')
 
 QBCore.Commands.Add('report', Lang:t("info.admin_report"), {{name='message', help='Message'}}, true, function(source, args)
     local src = source
     local msg = table.concat(args, ' ')
     local Player = QBCore.Functions.GetPlayer(source)
     TriggerClientEvent('qb-admin:client:SendReport', -1, GetPlayerName(src), src, msg)
+    TriggerEvent("logs:report", src, msg)
     TriggerEvent('qb-log:server:CreateLog', 'report', 'Report', 'green', '**'..GetPlayerName(source)..'** (CitizenID: '..Player.PlayerData.citizenid..' | ID: '..source..') **Report:** ' ..msg, false)
 end)
 
 QBCore.Commands.Add('staffchat', Lang:t("commands.staffchat_message"), {{name='message', help='Message'}}, true, function(source, args)
+    local src = source
     local msg = table.concat(args, ' ')
+    TriggerEvent("logs:staffchat", src, msg)
     TriggerClientEvent('qb-admin:client:SendStaffChat', -1, GetPlayerName(source), msg)
-end, 'admin')
+end, 'helper')
 
 QBCore.Commands.Add('givenuifocus', Lang:t("commands.nui_focus"), {{name='id', help='Player id'}, {name='focus', help='Set focus on/off'}, {name='mouse', help='Set mouse on/off'}}, true, function(source, args)
     local playerid = tonumber(args[1])
@@ -324,7 +354,7 @@ QBCore.Commands.Add('warn', Lang:t("commands.warn_a_player"), {{name='ID', help=
     else
         TriggerClientEvent('QBCore:Notify', source, Lang:t("error.not_online"), 'error')
     end
-end, 'admin')
+end, 'mod')
 
 QBCore.Commands.Add('checkwarns', Lang:t("commands.check_player_warning"), {{name='id', help='Player'}, {name='Warning', help='Number of warning, (1, 2 or 3 etc..)'}}, false, function(source, args)
     if args[2] == nil then
@@ -340,7 +370,7 @@ QBCore.Commands.Add('checkwarns', Lang:t("commands.check_player_warning"), {{nam
             TriggerClientEvent('chat:addMessage', source, 'SYSTEM', 'warning', targetPlayer.PlayerData.name..' has been warned by '..sender.PlayerData.name..', Reason: '..warnings[selectedWarning].reason)
         end
     end
-end, 'admin')
+end, 'helper')
 
 QBCore.Commands.Add('delwarn', Lang:t("commands.delete_player_warning"), {{name='id', help='Player'}, {name='Warning', help='Number of warning, (1, 2 or 3 etc..)'}}, true, function(source, args)
     local targetPlayer = QBCore.Functions.GetPlayer(tonumber(args[1]))
@@ -351,7 +381,7 @@ QBCore.Commands.Add('delwarn', Lang:t("commands.delete_player_warning"), {{name=
         TriggerClientEvent('chat:addMessage', source, 'SYSTEM', 'warning', 'You have deleted warning ('..selectedWarning..') , Reason: '..warnings[selectedWarning].reason)
         MySQL.Async.execute('DELETE FROM player_warns WHERE warnId = ?', { warnings[selectedWarning].warnId })
     end
-end, 'admin')
+end, 'sadmin')
 
 QBCore.Commands.Add('reportr', Lang:t("commands.reply_to_report"), {{name='id', help='Player'}, {name = 'message', help = 'Message to respond with'}}, false, function(source, args, rawCommand)
     local src = source
@@ -374,7 +404,7 @@ QBCore.Commands.Add('reportr', Lang:t("commands.reply_to_report"), {{name='id', 
     })
     TriggerClientEvent('QBCore:Notify', src, 'Reply Sent')
     TriggerEvent('qb-log:server:CreateLog', 'report', 'Report Reply', 'red', '**'..GetPlayerName(src)..'** replied on: **'..OtherPlayer.PlayerData.name.. ' **(ID: '..OtherPlayer.PlayerData.source..') **Message:** ' ..msg, false)
-end, 'admin')
+end, 'helper')
 
 QBCore.Commands.Add('setmodel', Lang:t("commands.change_ped_model"), {{name='model', help='Name of the model'}, {name='id', help='Id of the Player (empty for yourself)'}}, false, function(source, args)
     local model = args[1]
@@ -412,13 +442,13 @@ QBCore.Commands.Add('reporttoggle', Lang:t("commands.report_toggle"), {}, false,
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t("error.no_receive_report"), 'error')
     end
-end, 'admin')
+end, 'helper')
 
 QBCore.Commands.Add('kickall', Lang:t("commands.kick_all"), {}, false, function(source, args)
     local src = source
     if src > 0 then
         local reason = table.concat(args, ' ')
-        if QBCore.Functions.HasPermission(src, 'god') or IsPlayerAceAllowed(src, 'command') then
+        if QBCore.Functions.HasPermission(src, 'director') or IsPlayerAceAllowed(src, 'command') then
             if reason and reason ~= '' then
                 for k, v in pairs(QBCore.Functions.GetPlayers()) do
                     local Player = QBCore.Functions.GetPlayer(v)
@@ -438,7 +468,7 @@ QBCore.Commands.Add('kickall', Lang:t("commands.kick_all"), {}, false, function(
             end
         end
     end
-end, 'god')
+end, 'director')
 
 QBCore.Commands.Add('setammo', Lang:t("commands.ammo_amount_set"), {{name='amount', help='Amount of bullets, for example: 20'}, {name='weapon', help='Name of the weapen, for example: WEAPON_VINTAGEPISTOL'}}, false, function(source, args)
     local src = source
